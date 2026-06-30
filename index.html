@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Kirkpatrick 360° & People Analytics — IX Comercio</title>
+    
+    <!-- Librerías de Visualización y Datos (CDNs estables) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.0/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        :root {
+            --navy-dark: #0F172A;
+            --navy-main: #1E293B;
+            --teal-main: #26D9B0; /* Tu color corporativo exacto */
+            --teal-hover: #1EB896;
+            --teal-bg: #F0FDFA;
+            --bg-global: #F8FAFC;
+            --white: #FFFFFF;
+            --text-main: #334155;
+            --text-muted: #64748B;
+            --success: #10B981;
+            --danger: #EF4444;
+            --border: #E2E8F0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-global); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+
+        /* SIDEBAR COMPONENT */
+        #sidebar { width: 290px; background-color: var(--navy-dark); color: var(--white); display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar-brand { padding: 25px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-brand h2 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+        .sidebar-brand p { font-size: 11px; color: var(--teal-main); margin-top: 4px; text-transform: uppercase; font-weight: 600; }
+        .sidebar-menu { list-style: none; padding: 20px 0; flex-grow: 1; overflow-y: auto; }
+        .sidebar-menu li { padding: 14px 20px; cursor: pointer; display: flex; align-items: center; font-size: 13.5px; transition: all 0.2s; border-left: 4px solid transparent; color: #94A3B8; }
+        .sidebar-menu li:hover, .sidebar-menu li.active { background-color: rgba(255,255,255,0.04); color: var(--white); border-left-color: var(--teal-main); }
+        .sidebar-menu li .icon { margin-right: 12px; font-size: 16px; }
+
+        /* MAIN CONTENT CONTAINER */
+        #main-wrapper { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #topbar { height: 70px; background-color: var(--white); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; flex-shrink: 0; }
+        .topbar-title h1 { font-size: 20px; color: var(--navy-dark); font-weight: 600; }
+        
+        /* FILTERS TOOLBAR */
+        #filters-bar { background-color: var(--white); padding: 14px 30px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+        .filter-group { display: flex; align-items: center; gap: 10px; }
+        .filter-group label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .filter-group select { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border); font-size: 13.5px; color: var(--text-main); background-color: var(--bg-global); outline: none; transition: border 0.2s; }
+        .filter-group select:focus { border-color: var(--teal-main); }
+
+        /* VIEW PANELS & CONTAINER */
+        #content-container { flex-grow: 1; padding: 35px; overflow-y: auto; }
+        .view-panel { display: none; }
+        .view-panel.active { display: block; }
+        
+        /* SUMMARY METRICS CARDS */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background-color: var(--white); border-radius: 10px; padding: 22px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.01); border: 1px solid var(--border); position: relative; overflow: hidden; }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background-color: var(--border); }
+        .kpi-card.status-teal::before { background-color: var(--teal-main); }
+        .kpi-card.status-navy::before { background-color: var(--navy-main); }
+        .kpi-card.status-success::before { background-color: var(--success); }
+        .kpi-card.status-danger::before { background-color: var(--danger); }
+        .kpi-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi-value { font-size: 26px; font-weight: 700; color: var(--navy-dark); margin-top: 8px; }
+
+        /* WORKSPACE BLOCKS & GRID */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 25px; margin-bottom: 25px; }
+        .col-12 { grid-column: span 12; }
+        .col-8 { grid-column: span 8; }
+        .col-6 { grid-column: span 6; }
+        .col-4 { grid-column: span 4; }
+
+        .chart-card { background-color: var(--white); border-radius: 10px; padding: 24px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); display: flex; flex-direction: column; }
+        .chart-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+        .chart-header h3 { font-size: 15px; color: var(--navy-dark); font-weight: 600; }
+        .chart-body { position: relative; flex-grow: 1; width: 100%; min-height: 260px; }
+
+        /* PEDAGOGICAL METHODOLOGY COMPONENT */
+        .framework-box { background-color: var(--teal-bg); border-left: 4px solid var(--teal-main); padding: 20px; border-radius: 0 10px 10px 0; margin-bottom: 25px; }
+        .framework-box h4 { color: var(--navy-dark); margin-bottom: 8px; font-size: 14.5px; font-weight: 600; }
+        .framework-box p { font-size: 13px; line-height: 1.5; color: var(--text-main); }
+        .framework-box .measurement-ideas { margin-top: 12px; background: rgba(255,255,255,0.6); padding: 12px; border-radius: 6px; border: 1px dashed rgba(38, 217, 176, 0.4); }
+        .framework-box .measurement-ideas h5 { font-size: 12px; text-transform: uppercase; color: var(--navy-main); margin-bottom: 6px; font-weight: 700; }
+        .framework-box .measurement-ideas ul { margin-left: 18px; font-size: 12.5px; color: var(--text-main); }
+
+        /* FILE UPLOADER WIDGET */
+        .stage-uploader { background: var(--white); border: 2px dashed var(--border); border-radius: 10px; padding: 20px; text-align: center; margin-bottom: 25px; transition: all 0.2s; }
+        .stage-uploader:hover { border-color: var(--teal-main); background-color: var(--bg-global); }
+        .stage-uploader p { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; }
+        .stage-uploader input[type="file"] { display: none; }
+        .uploader-btn { background-color: var(--navy-main); color: var(--white); padding: 8px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border: none; }
+        .uploader-btn:hover { background-color: var(--navy-dark); }
+
+        /* TABLES */
+        .table-wrapper { overflow-x: auto; width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+        .data-table th { background-color: var(--navy-main); color: var(--white); padding: 12px 16px; font-weight: 600; }
+        .data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); background-color: var(--white); }
+        .data-table tr:last-child td { border-bottom: none; }
+
+        /* SYSTEM GENERAL BUTTONS */
+        .btn { padding: 9px 18px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .btn-teal { background-color: var(--teal-main); color: var(--navy-dark); font-weight: 600; }
+        .btn-teal:hover { background-color: var(--teal-hover); }
+        .btn-secondary { background-color: var(--border); color: var(--navy-main); }
+        .btn-secondary:hover { background-color: #CBD5E1; }
+
+        /* NOTIFICATION APP BANNER */
+        #app-toast { display: none; position: fixed; bottom: 25px; right: 25px; background-color: var(--navy-dark); color: var(--white); padding: 14px 24px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); z-index: 9999; font-size: 13px; border-left: 4px solid var(--teal-main); }
+        
+        /* ROI SPECIAL STYLES */
+        .roi-flex { display: flex; gap: 15px; margin-bottom: 20px; }
+        .roi-input-card { background: var(--bg-global); padding: 15px; border-radius: 8px; border: 1px solid var(--border); flex: 1; }
+        .roi-input-card label { display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; }
+        .roi-input-card input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; color: var(--navy-dark); font-weight: 600; outline: none; }
+        .roi-input-card input:focus { border-color: var(--teal-main); }
+    </style>
+</head>
+<body>
+
+    <div id="app-toast"></div>
+
+    <!-- SIDEBAR NAVIGATION -->
+    <div id="sidebar">
+        <div>
+            <div class="sidebar-brand">
+                <h2>IX Comercio</h2>
+                <p>Kirkpatrick Core v2.0</p>
+            </div>
+            <ul class="sidebar-menu">
+                <li class="active" onclick="changeView('resumen', this)"><span class="icon">📈</span>Resumen Corporativo</li>
+                <li onclick="changeView('nivel1', this)"><span class="icon">⚡</span>Nivel 1: Reacción</li>
+                <li onclick="changeView('nivel2', this)"><span class="icon">🧠</span>Nivel 2: Aprendizaje</li>
+                <li onclick="changeView('nivel3', this)"><span class="icon">💼</span>Nivel 3: Comportamiento</li>
+                <li onclick="changeView('nivel4', this)"><span class="icon">🎯</span>Nivel 4: Resultados</li>
+                <li onclick="changeView('roi', this)"><span class="icon">💰</span>Módulo ROI Especial</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- CORE WRAPPER -->
+    <div id="main-wrapper">
+        
+        <!-- TOPBAR CONTROLS -->
+        <div id="topbar">
+            <div class="topbar-title"><h1 id="view-title">Resumen Corporativo</h1></div>
+            <div>
+                <button class="btn btn-secondary" onclick="downloadAllTemplates()">📥 Descargar Estructuras Excel</button>
+                <button class="btn btn-teal" onclick="revertToDemoData()">🔄 Datos Demo</button>
+            </div>
+        </div>
+
+        <!-- TARGET SEGMENT FILTERS -->
+        <div id="filters-bar">
+            <div class="filter-group">
+                <label>Equipo Organizacional:</label>
+                <select id="sel-equipo" onchange="runDataPipeline()">
+                    <option value="ALL">-- Todos los Equipos --</option>
+                    <option value="Retail">Retail</option>
+                    <option value="Digital Services">Digital Services</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Plan de Formación:</label>
+                <select id="sel-plan" onchange="runDataPipeline()">
+                    <option value="ALL">-- Todos los Planes --</option>
+                    <option value="Liderazgo">Liderazgo</option>
+                    <option value="Negociación">Negociación</option>
+                    <option value="Habilidades Digitales">Habilidades Digitales</option>
+                    <option value="Servicio al Cliente">Servicio al Cliente</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- DYNAMIC VIEWS CONTAINER -->
+        <div id="content-container">
+
+            <!-- VIEW: GENERAL SUMMARY -->
+            <div id="view-resumen" class="view-panel active">
+                <div class="kpi-grid">
+                    <div class="kpi-card status-teal">
+                        <div class="kpi-label">Reacción Promedio (N1)</div>
+                        <div class="kpi-value" id="kpi-n1-res">0.0 / 5.0</div>
+                    </div>
+                    <div class="kpi-card status-navy">
+                        <div class="kpi-label">Delta Aprendizaje (N2)</div>
+                        <div class="kpi-value" id="kpi-n2-res">+0.0%</div>
+                    </div>
+                    <div class="kpi-card status-success">
+                        <div class="kpi-label">Aplicación en Campo (N3)</div>
+                        <div class="kpi-value" id="kpi-n3-res">0.0 / 100%</div>
+                    </div>
+                    <div class="kpi-card status-danger">
+                        <div class="kpi-label">Impacto Operativo (N4)</div>
+                        <div class="kpi-value" id="kpi-n4-res">0.0%</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Consolidado General de Indicadores de Desarrollo</h3></div>
+                            <div class="chart-body"><canvas id="chart-global-bars"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: LEVEL 1 -->
+            <div id="view-nivel1" class="view-panel">
+                <div class="framework-box">
+                    <h4>¿En qué consiste el Nivel 1: Reacción?</h4>
+                    <p>Mide la respuesta inicial de los colaboradores ante la experiencia de capacitación. Evalúa el grado de satisfacción, el compromiso percibido y la relevancia que le asignan al contenido para sus tareas cotidianas.</p>
+                    <div class="measurement-ideas">
+                        <h5>💡 Propuestas de Medición Avanzada (IX Comercio):</h5>
+                        <ul>
+                            <li><strong>NPS del Programa:</strong> Net Promoter Score aplicado vía formulario digital al minuto cero del cierre.</li>
+                            <li><strong>Índice de Utilidad Percibida:</strong> Pregunta en escala Likert (1-5) enfocada en: "¿Qué tanto aplicarás esto en tu día a día?".</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="stage-uploader">
+                    <p>Sube la matriz Excel de <strong>Reacción (N1)</strong> para recalcular los gráficos de este nivel.</p>
+                    <label class="uploader-btn">
+                        📂 Seleccionar Excel N1
+                        <input type="file" onchange="parseStageExcel(this, 'N1')">
+                    </label>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Nivel de Satisfacción por Plan formativo</h3></div>
+                            <div class="chart-body"><canvas id="chart-n1-canvas"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: LEVEL 2 -->
+            <div id="view-nivel2" class="view-panel">
+                <div class="framework-box">
+                    <h4>¿En qué consiste el Nivel 2: Aprendizaje?</h4>
+                    <p>Evalúa el incremento real en el conocimiento teórico, habilidades técnicas o cambios de actitud declarados por el colaborador tras participar en el plan estructurado.</p>
+                    <div class="measurement-ideas">
+                        <h5>💡 Propuestas de Medición Avanzada (IX Comercio):</h5>
+                        <ul>
+                            <li><strong>Evaluaciones Blindadas (Pre/Post Test):</strong> Cuestionarios idénticos aplicados antes de iniciar el módulo y 48 horas tras su finalización.</li>
+                            <li><strong>Simulaciones Controladas:</strong> Casos prácticos de atención al consumidor o resolución tecnológica medidos bajo rúbrica estándar.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="stage-uploader">
+                    <p>Sube la matriz Excel de <strong>Aprendizaje (N2)</strong> para evaluar la ganancia de conocimiento.</p>
+                    <label class="uploader-btn">
+                        📂 Seleccionar Excel N2
+                        <input type="file" onchange="parseStageExcel(this, 'N2')">
+                    </label>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Comparativo Conocimiento Base vs Post-Formación</h3></div>
+                            <div class="chart-body"><canvas id="chart-n2-canvas"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: LEVEL 3 -->
+            <div id="view-nivel3" class="view-panel">
+                <div class="framework-box">
+                    <h4>¿En qué consiste el Nivel 3: Comportamiento?</h4>
+                    <p>Determina si los conocimientos y habilidades realmente se transfieren al puesto de trabajo. Analiza si el participante cambia su conducta habitual y adopta las metodologías aprendidas en los flujos de su equipo.</p>
+                    <div class="measurement-ideas">
+                        <h5>💡 Propuestas de Medición Avanzada (IX Comercio):</h5>
+                        <ul>
+                            <li><strong>Evaluación Cruzada 180° / 360°:</strong> Encuesta corta enviada al Líder Directo y Pares a los 30 y 60 días del taller.</li>
+                            <li><strong>Auditorías en Tienda / Shadowing:</strong> Observación directa no invasiva basada en las conductas críticas clave que debían implementarse.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="stage-uploader">
+                    <p>Sube la matriz Excel de <strong>Comportamiento (N3)</strong> para analizar la adopción en campo.</p>
+                    <label class="uploader-btn">
+                        📂 Seleccionar Excel N3
+                        <input type="file" onchange="parseStageExcel(this, 'N3')">
+                    </label>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Porcentaje de Adopción Conductual en Rutinas Diarias</h3></div>
+                            <div class="chart-body"><canvas id="chart-n3-canvas"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: LEVEL 4 -->
+            <div id="view-nivel4" class="view-panel">
+                <div class="framework-box">
+                    <h4>¿En qué consiste el Nivel 4: Resultados?</h4>
+                    <p>Verifica el impacto directo de la capacitación en las metas globales del negocio. Cruza los programas formativos con las métricas de control macro (KPls duros) de la operación de IX Comercio.</p>
+                    <div class="measurement-ideas">
+                        <h5>💡 Propuestas de Medición Avanzada (IX Comercio):</h5>
+                        <ul>
+                            <li><strong>Eficiencia Operativa:</strong> Reducción del tiempo de resolución en tickets técnicos de Digital Services.</li>
+                            <li><strong>Venta Sugerida y Conversión:</strong> Aumento del ticket promedio en tiendas físicas de Retail post-taller de negociación.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="stage-uploader">
+                    <p>Sube la matriz Excel de <strong>Resultados de Negocio (N4)</strong> para mapear el impacto macro.</p>
+                    <label class="uploader-btn">
+                        📂 Seleccionar Excel N4
+                        <input type="file" onchange="parseStageExcel(this, 'N4')">
+                    </label>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Cumplimiento Operativo de Negocio Alcanzado (%)</h3></div>
+                            <div class="chart-body"><canvas id="chart-n4-canvas"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: RETURN ON INVESTMENT (ROI) -->
+            <div id="view-roi" class="view-panel">
+                <div class="framework-box" style="background-color: #F0FDF4; border-left-color: var(--success)">
+                    <h4>Módulo Financiero Avanzado: ROI de Capacitación</h4>
+                    <p>Este módulo calcula el Retorno de Inversión Financiero cruzando los Costos Totales de Ejecución contra el Retorno Económico directo percibido en los indicadores de rendimiento del negocio.</p>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="col-4">
+                        <div class="chart-card" style="min-height: auto; gap: 15px;">
+                            <div class="chart-header" style="margin-bottom:0; padding-bottom: 8px;"><h3>Variables Financieras</h3></div>
+                            
+                            <div class="roi-input-card">
+                                <label>Costos Totales del Plan ($ USD):</label>
+                                <input type="number" id="roi-costos" value="12000" oninput="calculateFinancialROI()">
+                            </div>
+                            <div class="roi-input-card">
+                                <label>Retorno Económico Logrado ($ USD):</label>
+                                <input type="number" id="roi-retorno" value="38000" oninput="calculateFinancialROI()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-8">
+                        <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 20px;">
+                            <div class="kpi-card status-success">
+                                <div class="kpi-label">Retorno de Inversión Financiero (ROI)</div>
+                                <div class="kpi-value" id="financial-roi-val" style="color: var(--success);">216.7%</div>
+                            </div>
+                            <div class="kpi-card status-teal">
+                                <div class="kpi-label">Beneficio Neto Estimado</div>
+                                <div class="kpi-value" id="financial-net-val">$26,000</div>
+                            </div>
+                        </div>
+
+                        <div class="chart-card" style="min-height: auto;">
+                            <div class="chart-header"><h3>Cargar Indicadores Clave de Negocio (KPls Duros)</h3></div>
+                            <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 12px;">
+                                Sube el archivo Excel con los indicadores clave calculados antes y después de la capacitación. La app determinará de forma automática el porcentaje de mejora neto obtenido por plan.
+                            </p>
+                            <div class="stage-uploader" style="margin-bottom: 0; padding: 15px;">
+                                <label class="uploader-btn">
+                                    📂 Cargar Matriz KPls Duros (ROI)
+                                    <input type="file" onchange="parseStageExcel(this, 'ROI')">
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="chart-card">
+                            <div class="chart-header"><h3>Impacto Específico Registrado por Indicador de Negocio</h3></div>
+                            <div class="table-wrapper">
+                                <table class="data-table" id="table-roi-indicators">
+                                    <thead>
+                                        <tr>
+                                            <th>Plan Formación</th>
+                                            <th>Equipo</th>
+                                            <th>Nombre del Indicador</th>
+                                            <th>Valor Línea Base (Pre)</th>
+                                            <th>Valor Registrado (Post)</th>
+                                            <th>Mejora Impacto Neto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td colspan="6" style="text-align: center; color: var(--text-muted)">No hay registros cargados. Usa el botón "Datos Demo" o sube tu Excel.</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- CORE JAVASCRIPT SYSTEM ENGINE -->
+    <script>
+        // Centralized Global Relational State Databases
+        let DB_N1 = [];
+        let DB_N2 = [];
+        let DB_N3 = [];
+        let DB_N4 = [];
+        let DB_ROI = [];
+        
+        let CHART_INSTANCES = {};
+
+        document.addEventListener("DOMContentLoaded", () => {
+            initChartArchitecture();
+            revertToDemoData();
+        });
+
+        function changeView(viewId, menuElement) {
+            document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
+            document.querySelectorAll('.sidebar-menu li').forEach(item => item.classList.remove('active'));
+            
+            document.getElementById(`view-${viewId}`).classList.add('active');
+            menuElement.classList.add('active');
+            document.getElementById('view-title').innerText = menuElement.innerText.trim();
+        }
+
+        function showNotification(message) {
+            const toast = document.getElementById('app-toast');
+            toast.innerText = message;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 4500);
+        }
+
+        // INITIALIZE CHART ARCHITECTURE WITH RENDER PADDING
+        function initChartArchitecture() {
+            const standardOptions = { responsive: true, maintainAspectRatio: false };
+
+            CHART_INSTANCES.global = new Chart(document.getElementById('chart-global-bars'), {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: standardOptions
+            });
+
+            CHART_INSTANCES.n1 = new Chart(document.getElementById('chart-n1-canvas'), {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: { ...standardOptions, scales: { y: { min: 0, max: 5 } } }
+            });
+
+            CHART_INSTANCES.n2 = new Chart(document.getElementById('chart-n2-canvas'), {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: standardOptions
+            });
+
+            CHART_INSTANCES.n3 = new Chart(document.getElementById('chart-n3-canvas'), {
+                type: 'line',
+                data: { labels: [], datasets: [] },
+                options: { ...standardOptions, scales: { y: { min: 0, max: 100 } } }
+            });
+
+            CHART_INSTANCES.n4 = new Chart(document.getElementById('chart-n4-canvas'), {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: { ...standardOptions, scales: { y: { min: 0, max: 100 } } }
+            });
+        }
+
+        // RE-CALCULATE ROI METHODOLOGY
+        function calculateFinancialROI() {
+            const costs = parseFloat(document.getElementById('roi-costos').value) || 0;
+            const revenue = parseFloat(document.getElementById('roi-retorno').value) || 0;
+            
+            const netBenefit = revenue - costs;
+            const roiPercent = costs > 0 ? (netBenefit / costs) * 100 : 0;
+
+            document.getElementById('financial-net-val').innerText = `$${netBenefit.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+            const roiEl = document.getElementById('financial-roi-val');
+            roiEl.innerText = `${roiPercent.toFixed(1)}%`;
+            
+            if (roiPercent >= 0) {
+                roiEl.style.color = "var(--success)";
+            } else {
+                roiEl.style.color = "var(--danger)";
+            }
+        }
+
+        // DATA INTERPRETATION PIPELINE & FILTERING FILTERS ACTIVATION
+        function runDataPipeline() {
+            const selectedEquipo = document.getElementById('sel-equipo').value;
+            const selectedPlan = document.getElementById('sel-plan').value;
+
+            // Universal Filter Logic
+            const filterRow = (row) => {
+                const matchEq = (selectedEquipo === 'ALL' || row.Equipo === selectedEquipo);
+                const matchPl = (selectedPlan === 'ALL' || row.PlanFormacion === selectedPlan);
+                return matchEq && matchPl;
+            };
+
+            const fN1 = DB_N1.filter(filterRow);
+            const fN2 = DB_N2.filter(filterRow);
+            const fN3 = DB_N3.filter(filterRow);
+            const fN4 = DB_N4.filter(filterRow);
+            const fROI = DB_ROI.filter(filterRow);
+
+            // Compute Averages
+            const avgN1 = fN1.length ? (fN1.reduce((sum, r) => sum + r.ReaccionPuntaje, 0) / fN1.length) : 0;
+            
+            let deltaN2 = 0;
+            if (fN2.length) {
+                const pre = fN2.reduce((sum, r) => sum + r.PreTest, 0) / fN2.length;
+                const post = fN2.reduce((sum, r) => sum + r.PostTest, 0) / fN2.length;
+                deltaN2 = post - pre;
+            }
+
+            const avgN3 = fN3.length ? (fN3.reduce((sum, r) => sum + r.AdopcionPorcentaje, 0) / fN3.length) : 0;
+            const avgN4 = fN4.length ? (fN4.reduce((sum, r) => sum + r.ResultadoPorcentaje, 0) / fN4.length) : 0;
+
+            // Paint Card Indicators
+            document.getElementById('kpi-n1-res').innerText = `${avgN1.toFixed(1)} / 5.0`;
+            document.getElementById('kpi-n2-res').innerText = `${deltaN2 >= 0 ? '+' : ''}${deltaN2.toFixed(1)}%`;
+            document.getElementById('kpi-n3-res').innerText = `${avgN3.toFixed(1)}%`;
+            document.getElementById('kpi-n4-res').innerText = `${avgN4.toFixed(1)}%`;
+
+            // Refresh Level Specific Visual Analytics
+            refreshGraphicsEngine(selectedEquipo, selectedPlan, fN1, fN2, fN3, fN4);
+            refreshROITable(fROI);
+        }
+
+        function refreshGraphicsEngine(eq, pl, fN1, fN2, fN3, fN4) {
+            const categories = ["Liderazgo", "Negociación", "Habilidades Digitales", "Servicio al Cliente"];
+
+            const getAverageByPlan = (dataset, property, isDelta = false) => {
+                return categories.map(cat => {
+                    const rows = dataset.filter(r => r.PlanFormacion === cat);
+                    if(!rows.length) return 0;
+                    if(isDelta) {
+                        const pre = rows.reduce((s, r) => s + r.PreTest, 0) / rows.length;
+                        const post = rows.reduce((s, r) => s + r.PostTest, 0) / rows.length;
+                        return post - pre;
+                    }
+                    return rows.reduce((s, r) => s + r[property], 0) / rows.length;
+                });
+            };
+
+            const arrGlobalN1 = getAverageByPlan(fN1, 'ReaccionPuntaje').map(v => v * 20); // Normalizado a base 100
+            const arrGlobalN2 = getAverageByPlan(fN2, '', true);
+            const arrGlobalN3 = getAverageByPlan(fN3, 'AdopcionPorcentaje');
+
+            // 1. CHART SUMMARY
+            CHART_INSTANCES.global.data = {
+                labels: categories,
+                datasets: [
+                    { label: 'Satisfacción Reacción (N1 Escala %)', data: arrGlobalN1, backgroundColor: '#1E293B' },
+                    { label: 'Delta Incremento Saber (N2 %)', data: arrGlobalN2, backgroundColor: '#26D9B0' },
+                    { label: 'Transferencia Campo (N3 %)', data: arrGlobalN3, backgroundColor: '#64748B' }
+                ]
+            };
+            CHART_INSTANCES.global.update();
+
+            // 2. CHART LEVEL 1
+            CHART_INSTANCES.n1.data = {
+                labels: categories,
+                datasets: [{ label: 'Puntaje de Reacción Promedio (1-5)', data: getAverageByPlan(fN1, 'ReaccionPuntaje'), backgroundColor: '#26D9B0' }]
+            };
+            CHART_INSTANCES.n1.update();
+
+            // 3. CHART LEVEL 2
+            CHART_INSTANCES.n2.data = {
+                labels: categories,
+                datasets: [
+                    { label: 'Pre-Test Base (%)', data: getAverageByPlan(fN2, 'PreTest'), backgroundColor: '#1E293B' },
+                    { label: 'Post-Test Adquirido (%)', data: getAverageByPlan(fN2, 'PostTest'), backgroundColor: '#26D9B0' }
+                ]
+            };
+            CHART_INSTANCES.n2.update();
+
+            // 4. CHART LEVEL 3
+            CHART_INSTANCES.n3.data = {
+                labels: categories,
+                datasets: [{ label: '% de Aplicabilidad Eficiente', data: getAverageByPlan(fN3, 'AdopcionPorcentaje'), borderColor: '#1E293B', fill: false, tension: 0.1 }]
+            };
+            CHART_INSTANCES.n3.update();
+
+            // 5. CHART LEVEL 4
+            CHART_INSTANCES.n4.data = {
+                labels: categories,
+                datasets: [{ label: '% Cumplimiento de KPl Operativo', data: getAverageByPlan(fN4, 'ResultadoPorcentaje'), backgroundColor: '#1E293B' }]
+            };
+            CHART_INSTANCES.n4.update();
+        }
+
+        function refreshROITable(filteredROI) {
+            const tbody = document.getElementById('table-roi-indicators').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = "";
+
+            if (!filteredROI.length) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted)">Ningún indicador coincide con los filtros aplicados.</td></tr>`;
+                return;
+            }
+
+            filteredROI.forEach(row => {
+                const tr = tbody.insertRow();
+                tr.insertCell(0).innerText = row.PlanFormacion;
+                tr.insertCell(1).innerText = row.Equipo;
+                tr.insertCell(2).innerText = row.NombreIndicador;
+                tr.insertCell(3).innerText = `${row.ValorPre}%`;
+                tr.insertCell(4).innerText = `${row.ValorPost}%`;
+                
+                const delta = row.ValorPost - row.ValorPre;
+                const cellDelta = tr.insertCell(5);
+                cellDelta.innerText = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`;
+                cellDelta.style.color = delta >= 0 ? 'var(--success)' : 'var(--danger)';
+                cellDelta.style.fontWeight = '700';
+            });
+        }
+
+        // EXCEL MULTI-STAGE INGESTION SYSTEM ENGINE (SHEETJS)
+        function parseStageExcel(inputElement, stageTag) {
+            if (!inputElement.files.length) return;
+            const file = inputElement.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const bytes = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(bytes, { type: 'array' });
+                const currentSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonRows = XLSX.utils.sheet_to_json(currentSheet);
+
+                if (!jsonRows.length) {
+                    showNotification("El archivo cargado está vacío.");
+                    return;
+                }
+
+                // Field Validation Matrix
+                const baseSample = jsonRows[0];
+                if (!('PlanFormacion' in baseSample) || !('Equipo' in baseSample)) {
+                    showNotification("Error de columnas: Falta 'PlanFormacion' o 'Equipo' en la cabecera.");
+                    return;
+                }
+
+                // Ingestion routing by specific phase
+                if (stageTag === 'N1') {
+                    if (!('ReaccionPuntaje' in baseSample)) { showNotification("Falta la columna 'ReaccionPuntaje'."); return; }
+                    DB_N1 = jsonRows.map(r => ({ PlanFormacion: r.PlanFormacion, Equipo: r.Equipo, ReaccionPuntaje: parseFloat(r.ReaccionPuntaje) || 0 }));
+                } 
+                else if (stageTag === 'N2') {
+                    if (!('PreTest' in baseSample) || !('PostTest' in baseSample)) { showNotification("Faltan las columnas 'PreTest' o 'PostTest'."); return; }
+                    DB_N2 = jsonRows.map(r => ({ PlanFormacion: r.PlanFormacion, Equipo: r.Equipo, PreTest: parseFloat(r.PreTest) || 0, PostTest: parseFloat(r.PostTest) || 0 }));
+                } 
+                else if (stageTag === 'N3') {
+                    if (!('AdopcionPorcentaje' in baseSample)) { showNotification("Falta la columna 'AdopcionPorcentaje'."); return; }
+                    DB_N3 = jsonRows.map(r => ({ PlanFormacion: r.PlanFormacion, Equipo: r.Equipo, AdopcionPorcentaje: parseFloat(r.AdopcionPorcentaje) || 0 }));
+                } 
+                else if (stageTag === 'N4') {
+                    if (!('ResultadoPorcentaje' in baseSample)) { showNotification("Falta la columna 'ResultadoPorcentaje'."); return; }
+                    DB_N4 = jsonRows.map(r => ({ PlanFormacion: r.PlanFormacion, Equipo: r.Equipo, ResultadoPorcentaje: parseFloat(r.ResultadoPorcentaje) || 0 }));
+                } 
+                else if (stageTag === 'ROI') {
+                    if (!('NombreIndicador' in baseSample) || !('ValorPre' in baseSample) || !('ValorPost' in baseSample)) { showNotification("Columnas ROI faltantes."); return; }
+                    DB_ROI = jsonRows.map(r => ({ PlanFormacion: r.PlanFormacion, Equipo: r.Equipo, NombreIndicador: r.NombreIndicador, ValorPre: parseFloat(r.ValorPre) || 0, ValorPost: parseFloat(r.ValorPost) || 0 }));
+                }
+
+                runDataPipeline();
+                showNotification(`¡Fase ${stageTag} actualizada dinámicamente con éxito!`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // GENERATE DOWNLOADABLE CSV MATRIX TEMPLATES
+        function downloadAllTemplates() {
+            const structures = {
+                N1: "PlanFormacion,Equipo,ReaccionPuntaje\nLiderazgo,Retail,4.5\nHabilidades Digitales,Digital Services,4.8",
+                N2: "PlanFormacion,Equipo,PreTest,PostTest\nNegociación,Retail,55,85\nServicio al Cliente,Digital Services,60,90",
+                N3: "PlanFormacion,Equipo,AdopcionPorcentaje\nLiderazgo,Digital Services,78\nHabilidades Digitales,Retail,82",
+                N4: "PlanFormacion,Equipo,ResultadoPorcentaje\nNegociación,Retail,88\nServicio al Cliente,Digital Services,94",
+                ROI: "PlanFormacion,Equipo,NombreIndicador,ValorPre,ValorPost\nServicio al Cliente,Digital Services,NPS de Atencion Telefonica,45,75\nNegociación,Retail,Ticket Promedio de Venta,60,82"
+            };
+
+            for (const key in structures) {
+                const blob = new Blob([structures[key]], { type: 'text/csv;charset=utf-8;' });
+                const dummyLink = document.createElement("a");
+                dummyLink.href = URL.createObjectURL(blob);
+                dummyLink.setAttribute("download", `Plantilla_Estructura_${key}.csv`);
+                document.body.appendChild(dummyLink);
+                dummyLink.click();
+                document.body.removeChild(dummyLink);
+            }
+            showNotification("Estructuras CSV descargadas con éxito.");
+        }
+
+        // POPULATE VOLATILE STORAGE DATABASE FOR DEMONSTRATION RUNS
+        function revertToDemoData() {
+            const plans = ["Liderazgo", "Negociación", "Habilidades Digitales", "Servicio al Cliente"];
+            const teams = ["Retail", "Digital Services"];
+
+            DB_N1 = []; DB_N2 = []; DB_N3 = []; DB_N4 = []; DB_ROI = [];
+
+            // Populate Synthetic Relational Points
+            plans.forEach(plan => {
+                teams.forEach(team => {
+                    for(let i=0; i<15; i++) {
+                        DB_N1.push({ PlanFormacion: plan, Equipo: team, ReaccionPuntaje: parseFloat((Math.random() * 1.3 + 3.7).toFixed(1)) });
+                        DB_N2.push({ PlanFormacion: plan, Equipo: team, PreTest: Math.floor(Math.random() * 20 + 45), PostTest: Math.floor(Math.random() * 15 + 80) });
+                        DB_N3.push({ PlanFormacion: plan, Equipo: team, AdopcionPorcentaje: Math.floor(Math.random() * 25 + 70) });
+                        DB_N4.push({ PlanFormacion: plan, Equipo: team, ResultadoPorcentaje: Math.floor(Math.random() * 20 + 75) });
+                    }
+                    
+                    // Specific Hard Indicator Ingestion
+                    DB_ROI.push({
+                        PlanFormacion: plan,
+                        Equipo: team,
+                        NombreIndicador: plan === "Liderazgo" ? "Reducción de Rotación Temprana" : plan === "Negociación" ? "Cierre de Ventas Cruzadas" : plan === "Habilidades Digitales" ? "Adopción CRM" : "Satisfacción Consumidor Final",
+                        ValorPre: Math.floor(Math.random() * 20 + 40),
+                        ValorPost: Math.floor(Math.random() * 15 + 75)
+                    });
+                });
+            });
+
+            document.getElementById('roi-costos').value = 15000;
+            document.getElementById('roi-retorno').value = 48000;
+            
+            calculateFinancialROI();
+            runDataPipeline();
+            showNotification("Datos demo cargados. Cambia los filtros para ver la reactividad de la base.");
+        }
+    </script>
+</body>
+</html>
